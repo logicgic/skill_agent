@@ -15,11 +15,7 @@ import {
 } from "./document-router.js";
 import { SessionStore } from "./session-store.js";
 import { resolveScriptArgPlaceholders } from "../path-manager.js";
-import {
-  buildFinancialOutputPaths,
-  decideFinancialIntentByMessage,
-  type FinancialIntent,
-} from "./financial-intent.js";
+import { buildFinancialOutputPaths, detectFinancialIntent } from "./financial-intent.js";
 
 /**
  * 聊天服务构造参数。
@@ -81,78 +77,9 @@ export class ChatService {
       catalog: documentCatalog,
       projectRoot: this.projectRoot,
     });
-    /** 财报隐式意图决策，用于触发“提取 -> 分析”串联执行链路。 */
-    const financialIntentDecision = decideFinancialIntentByMessage(userMessage, documentCatalog);
-
+    /** 财报分析意图标记，用于触发提取后的二阶段分析。 */
+    const financialIntent = detectFinancialIntent(userMessage);
     let skillResultBlock = "";
-    /** 投资价值场景的能力边界声明，避免超范围结论。 */
-    let financialScopeDisclaimer = "";
-
-    if (financialIntentDecision) {
-      /** 财报意图标签，用于日志与测试断言。 */
-      const financialIntent: FinancialIntent = financialIntentDecision.intent;
-      /** 提取与分析输出文件路径。 */
-      const outputPaths = buildFinancialOutputPaths(this.projectRoot, financialIntentDecision.matchedPdf);
-      await fs.mkdir(path.dirname(outputPaths.extractJsonPath), { recursive: true });
-
-      yield {
-        type: "meta",
-        content: `financialIntent=${financialIntent} file=${financialIntentDecision.matchedPdf.relativePath}`,
-      };
-
-      /** 第一步：先从财报 PDF 提取结构化数据。 */
-      const extractExecution = await this.executeSkillWithFailureStage({
-        skillName: "pdf_financial_extract",
-        scriptPath: "scripts/extract_financial_tables.py",
-        args: [financialIntentDecision.matchedPdf.absolutePath, outputPaths.extractJsonPath],
-      });
-      /** 第二步：在提取结果基础上执行资产负债分析。 */
-      const analysisExecution = await this.executeSkillWithFailureStage({
-        skillName: "financial_statement_analysis",
-        scriptPath: "scripts/analyze_balance_sheet.py",
-        args: [outputPaths.extractJsonPath, outputPaths.analysisJsonPath],
-      });
-      yield {
-        type: "meta",
-        content: "financialChain=pdf_financial_extract->financial_statement_analysis",
-      };
-
-      const analysisRaw = await fs.readFile(outputPaths.analysisJsonPath, "utf-8");
-      const analysisParsed = JSON.parse(analysisRaw) as {
-        summary?: { overall_view?: string; top_signal?: string };
-      };
-      /** 分析摘要文本用于回注到最终回答上下文。 */
-      const analysisSummary = [
-        `overall=${analysisParsed.summary?.overall_view ?? "暂无分析概述"}`,
-        `topSignal=${analysisParsed.summary?.top_signal ?? "暂无"}`,
-      ].join("\n");
-
-      if (financialIntent === "investment_value_analysis") {
-        financialScopeDisclaimer = "当前结论基于资产负债表维度，不含利润表、现金流和估值模型。";
-        yield { type: "meta", content: financialScopeDisclaimer };
-      }
-
-      skillResultBlock = [
-        "[SKILL_EXECUTION]",
-        "skill=pdf_financial_extract",
-        "script=scripts/extract_financial_tables.py",
-        `exitCode=${extractExecution.exitCode}`,
-        `stdout=${extractExecution.stdout.slice(0, 1500)}`,
-        `stderr=${extractExecution.stderr.slice(0, 800)}`,
-        "[/SKILL_EXECUTION]",
-        "[SKILL_EXECUTION]",
-        "skill=financial_statement_analysis",
-        "script=scripts/analyze_balance_sheet.py",
-        `exitCode=${analysisExecution.exitCode}`,
-        `stdout=${analysisExecution.stdout.slice(0, 1500)}`,
-        `stderr=${analysisExecution.stderr.slice(0, 800)}`,
-        "[FINANCIAL_ANALYSIS_SUMMARY]",
-        analysisSummary,
-        "[/FINANCIAL_ANALYSIS_SUMMARY]",
-        "[/SKILL_EXECUTION]",
-      ].join("\n");
-    } else
-
     if (autoSkillDecision || (skillDecision.shouldUseSkill && skillDecision.skillName && skillDecision.scriptPath)) {
       // 触发契约：自动路由命中时优先，LLM 决策仅作后备。
       const triggerSource = autoSkillDecision ? "auto" : "llm";
@@ -215,6 +142,49 @@ export class ChatService {
         content: `skillExecutionConfirmed=true skillName=${selectedSkill.skillName} exitCode=${execution.exitCode}`,
       };
 
+      /** 二阶段分析：财报分析请求命中 PDF 提取后，继续执行资产负债表分析脚本。 */
+      let financialAnalysisBlock = "";
+      const shouldRunFinancialAnalysis = selectedSkill.skillName === "pdf_content_extract" && financialIntent !== null;
+      if (shouldRunFinancialAnalysis) {
+        const extractOutputPath = scriptArgs[1];
+        const matchedPdf = autoSkillDecision?.matchedDocument ?? documentCatalog.byType.pdf[0];
+        if (extractOutputPath && matchedPdf) {
+          const outputPaths = buildFinancialOutputPaths(this.projectRoot, matchedPdf);
+          const analysisExecution = await this.executeSkillWithFailureStage({
+            skillName: "pdf_content_extract",
+            scriptPath: "scripts/analyze_balance_sheet_from_extract.py",
+            args: [extractOutputPath, outputPaths.analysisJsonPath],
+          });
+          yield {
+            type: "meta",
+            content: "financialChain=pdf_content_extract->pdf_content_extract.analyze",
+          };
+
+          const analysisRaw = await fs.readFile(outputPaths.analysisJsonPath, "utf-8");
+          const analysisParsed = JSON.parse(analysisRaw) as {
+            summary?: { overall_view?: string; top_signal?: string; missing_field_count?: number };
+          };
+          const analysisSummary = [
+            `overall=${analysisParsed.summary?.overall_view ?? "暂无分析概述"}`,
+            `topSignal=${analysisParsed.summary?.top_signal ?? "暂无"}`,
+            `missingFieldCount=${analysisParsed.summary?.missing_field_count ?? 0}`,
+          ].join("\n");
+
+          financialAnalysisBlock = [
+            "[FINANCIAL_ANALYSIS_EXECUTION]",
+            `skill=pdf_content_extract`,
+            `script=scripts/analyze_balance_sheet_from_extract.py`,
+            `exitCode=${analysisExecution.exitCode}`,
+            `stdout=${analysisExecution.stdout.slice(0, 1500)}`,
+            `stderr=${analysisExecution.stderr.slice(0, 800)}`,
+            "[FINANCIAL_ANALYSIS_SUMMARY]",
+            analysisSummary,
+            "[/FINANCIAL_ANALYSIS_SUMMARY]",
+            "[/FINANCIAL_ANALYSIS_EXECUTION]",
+          ].join("\n");
+        }
+      }
+
       let parsedPreview = "";
       if (autoSkillDecision) {
         try {
@@ -239,6 +209,7 @@ export class ChatService {
         parsedPreview ? "[PARSED_DOCUMENT]" : "",
         parsedPreview,
         parsedPreview ? "[/PARSED_DOCUMENT]" : "",
+        financialAnalysisBlock,
         "[/SKILL_EXECUTION]",
       ]
         .filter(Boolean)
@@ -250,7 +221,7 @@ export class ChatService {
       ...previousHistory.map((message) => ({ role: message.role, content: message.content })),
       {
         role: "user",
-        content: [userMessage, skillResultBlock, financialScopeDisclaimer].filter(Boolean).join("\n\n"),
+        content: [userMessage, skillResultBlock].filter(Boolean).join("\n\n"),
       },
     ];
 
@@ -285,6 +256,7 @@ export class ChatService {
       "你是一个 Skill Agent。",
       "必须先理解历史上下文，再判断是否调用 skill。",
       "如果识别到 files 目录文档，优先按文档类型自动调用 skill。",
+      "如果用户要分析资产负债表，优先使用 balance_sheet_analysis skill 进行方法论分析。",
       "如果调用 skill，需要利用脚本执行结果和解析摘要进行回答。",
       "可用 skills: ",
       skillList,

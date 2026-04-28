@@ -16,7 +16,7 @@ describe("document router", () => {
     expect(docxFile?.relativePath).toContain("files");
   });
 
-  test("auto routes to pdf skill when user mentions file name without typing pdf", async () => {
+  test("auto routes to pdf content extraction skill when user mentions file name without typing pdf", async () => {
     const catalog = await buildDocumentCatalog(projectRoot);
     const decision = decideAutoSkillByDocument({
       userMessage: "请读取贵州茅台半年报并总结",
@@ -25,8 +25,8 @@ describe("document router", () => {
     });
 
     expect(decision).not.toBeNull();
-    expect(decision?.skillName).toBe("pdf");
-    expect(decision?.scriptPath).toBe("scripts/extract_form_structure.py");
+    expect(decision?.skillName).toBe("pdf_content_extract");
+    expect(decision?.scriptPath).toBe("scripts/extract_pdf_content.py");
     expect(decision?.args[0]).toContain(path.join(projectRoot, "files"));
     expect(decision?.args[0]).toContain("贵州");
     expect(decision?.args[0].toLowerCase().endsWith(".pdf")).toBe(true);

@@ -62,35 +62,43 @@ describe("skill sandbox", () => {
     ).rejects.toThrow("脚本路径非法");
   });
 
-  test("executes financial extraction and balance-sheet analysis scripts in sequence", async () => {
+  test("executes pdf content extraction script in sandbox", async () => {
     const pdfInput = path.join(projectRoot, "files", "pdf-files", "贵州茅台半年报.pdf");
-    const extractedJson = path.join(outputDir, "financial-extract.json");
-    const analyzedJson = path.join(outputDir, "financial-analysis.json");
+    const extractedJson = path.join(outputDir, "pdf-content-extract.json");
 
     const extractResult = await runSkillScript({
       projectRoot,
-      skillName: "pdf_financial_extract",
-      scriptPath: "scripts/extract_financial_tables.py",
+      skillName: "pdf_content_extract",
+      scriptPath: "scripts/extract_pdf_content.py",
       args: [pdfInput, extractedJson],
       timeoutMs: 120000,
     });
 
     expect(extractResult.exitCode).toBe(0);
-    expect(extractResult.stdout).toContain("Saved financial extraction");
+    expect(extractResult.stdout).toContain("Saved PDF content extraction");
 
-    const analyzeResult = await runSkillScript({
+    const extractedRaw = await fs.readFile(extractedJson, "utf-8");
+    const extracted = JSON.parse(extractedRaw) as { pages?: { page_number: number }[] };
+    expect((extracted.pages ?? []).length).toBeGreaterThan(0);
+  });
+
+  test("executes balance-sheet analysis script from extracted json in sandbox", async () => {
+    const extractedJson = path.join(outputDir, "pdf-content-extract.json");
+    const analysisJson = path.join(outputDir, "pdf-balance-sheet-analysis.json");
+
+    const result = await runSkillScript({
       projectRoot,
-      skillName: "financial_statement_analysis",
-      scriptPath: "scripts/analyze_balance_sheet.py",
-      args: [extractedJson, analyzedJson],
+      skillName: "pdf_content_extract",
+      scriptPath: "scripts/analyze_balance_sheet_from_extract.py",
+      args: [extractedJson, analysisJson],
       timeoutMs: 120000,
     });
 
-    expect(analyzeResult.exitCode).toBe(0);
-    expect(analyzeResult.stdout).toContain("Saved financial analysis");
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Saved balance-sheet analysis");
 
-    const analyzedRaw = await fs.readFile(analyzedJson, "utf-8");
-    const analyzed = JSON.parse(analyzedRaw) as { summary?: { overall_view?: string } };
-    expect(analyzed.summary?.overall_view).toContain("资产负债表");
+    const raw = await fs.readFile(analysisJson, "utf-8");
+    const parsed = JSON.parse(raw) as { summary?: { overall_view?: string } };
+    expect(parsed.summary?.overall_view).toContain("资产负债表");
   });
 });

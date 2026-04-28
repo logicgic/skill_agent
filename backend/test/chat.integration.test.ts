@@ -55,7 +55,7 @@ describe("chat integration", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.body).toContain("skill=pdf");
+    expect(response.body).toContain("skillName=pdf_content_extract");
     expect(response.body).toContain("skillTriggerSource=auto");
     expect(response.body).toContain("skillExecutionConfirmed=true");
   });
@@ -102,33 +102,20 @@ describe("chat integration", () => {
     }
   });
 
-  test("chains financial extract and balance sheet analysis for implicit balance-sheet intent", async () => {
+  test("runs extract->analyze chain for implicit financial pdf request", async () => {
     const response = await server.inject({
       method: "POST",
       url: "/api/chat/stream",
       payload: {
-        sessionId: "integration-financial-balance-sheet",
+        sessionId: "integration-financial-pdf-extract",
         message: "分析贵州茅台半年报的资产负债表。",
       },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.body).toContain("financialIntent=balance_sheet_analysis");
-    expect(response.body).toContain("financialChain=pdf_financial_extract->financial_statement_analysis");
-  });
-
-  test("adds scope disclaimer for investment-value intent", async () => {
-    const response = await server.inject({
-      method: "POST",
-      url: "/api/chat/stream",
-      payload: {
-        sessionId: "integration-financial-investment-value",
-        message: "分析贵州茅台半年报中的投资价值。",
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.body).toContain("financialIntent=investment_value_analysis");
-    expect(response.body).toContain("当前结论基于资产负债表维度");
+    expect(response.body).toContain("financialChain=pdf_content_extract->pdf_content_extract.analyze");
+    expect(response.body).toContain("skillTriggerSource=auto");
+    expect(response.body).toContain("FINANCIAL_ANALYSIS_");
+    expect(response.body).not.toContain("请确认我已成功提取内容后");
   });
 });

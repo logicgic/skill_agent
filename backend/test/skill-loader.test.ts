@@ -8,7 +8,7 @@ describe("skill loader", () => {
     const skills = await loadSkills(projectRoot);
     const names = skills.map((skill) => skill.name).sort();
 
-    expect(names).toEqual(["docx", "financial_statement_analysis", "pdf", "pdf_financial_extract", "xlsx"]);
+    expect(names).toEqual(["balance_sheet_analysis", "docx", "pdf", "pdf_content_extract", "xlsx"]);
 
     const pdfSkill = skills.find((skill) => skill.name === "pdf");
     expect(pdfSkill?.description.length).toBeGreaterThan(10);

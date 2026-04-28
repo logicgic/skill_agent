@@ -169,10 +169,10 @@ export const decideAutoSkillByDocument = (input: {
   const normalized = normalizeBaseName(matchedDocument.baseName);
   if (matchedDocument.type === "pdf") {
     return {
-      skillName: "pdf",
-      scriptPath: "scripts/extract_form_structure.py",
+      skillName: "pdf_content_extract",
+      scriptPath: "scripts/extract_pdf_content.py",
       args: [matchedDocument.absolutePath, path.join(input.projectRoot, "files", "parsed", "pdf", `${normalized}.json`)],
-      reason: `识别到 PDF 文档：${matchedDocument.relativePath}，自动调用 pdf skill`,
+      reason: `识别到 PDF 文档：${matchedDocument.relativePath}，自动调用 pdf_content_extract skill`,
       matchedDocument,
     };
   }
@@ -207,23 +207,17 @@ export const decideAutoSkillByDocument = (input: {
  * 读取并格式化解析结果摘要，回填给模型使用。
  */
 export const buildParsedResultPreview = async (decision: AutoSkillDecision): Promise<string> => {
-  if (decision.skillName === "pdf") {
+  if (decision.skillName === "pdf_content_extract") {
     const outputPath = decision.args[1];
     const raw = await fs.readFile(outputPath, "utf-8");
     const parsed = JSON.parse(raw) as {
       pages?: unknown[];
-      labels?: unknown[];
-      lines?: unknown[];
-      checkboxes?: unknown[];
-      row_boundaries?: unknown[];
+      warnings?: unknown[];
     };
     return [
       `file=${decision.matchedDocument.relativePath}`,
       `pages=${parsed.pages?.length ?? 0}`,
-      `labels=${parsed.labels?.length ?? 0}`,
-      `lines=${parsed.lines?.length ?? 0}`,
-      `checkboxes=${parsed.checkboxes?.length ?? 0}`,
-      `rowBoundaries=${parsed.row_boundaries?.length ?? 0}`,
+      `warnings=${parsed.warnings?.length ?? 0}`,
     ].join("\n");
   }
 
@@ -246,7 +240,7 @@ export const buildParsedResultPreview = async (decision: AutoSkillDecision): Pro
  * 确保自动路由技能的输出目录存在。
  */
 export const ensureAutoSkillOutputPath = async (decision: AutoSkillDecision): Promise<void> => {
-  if (decision.skillName === "pdf") {
+  if (decision.skillName === "pdf_content_extract") {
     await fs.mkdir(path.dirname(decision.args[1]), { recursive: true });
     return;
   }

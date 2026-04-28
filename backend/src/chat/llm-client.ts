@@ -1,4 +1,4 @@
-﻿import type { ChatMessage } from "llamaindex";
+import type { ChatMessage } from "llamaindex";
 import { OpenAI } from "@llamaindex/openai";
 import type { SkillDefinition } from "../skill/skill-types.js";
 
@@ -43,10 +43,10 @@ export class FakeAgentLlm implements AgentLlm {
     if (normalizedMessage.includes("pdf")) {
       return {
         shouldUseSkill: true,
-        skillName: "pdf",
-        scriptPath: "scripts/extract_form_structure.py",
+        skillName: "pdf_content_extract",
+        scriptPath: "scripts/extract_pdf_content.py",
         args: ["{FILE_PDF}", "{OUTPUT_JSON}"],
-        reason: "消息中明确提到 pdf，优先调用 pdf skill",
+        reason: "消息中明确提到 pdf，优先调用 pdf_content_extract skill",
       };
     }
 
