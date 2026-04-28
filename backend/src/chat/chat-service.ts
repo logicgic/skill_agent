@@ -47,17 +47,30 @@ export class ChatService {
   private readonly llm: AgentLlm;
   /** 项目根目录。 */
   private readonly projectRoot: string;
+  /** 无小图标输出兜底：覆盖常见 emoji 与装饰符号范围。 */
+  private readonly emojiRegex =
+    /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu;
 
   constructor(private readonly options: ChatServiceOptions) {
     this.projectRoot = options.projectRoot;
 
-    this.llm = options.useFakeLlm || !options.apiKey
-      ? new FakeAgentLlm()
-      : new LlamaIndexAgentLlm({
-          apiKey: options.apiKey,
-          baseURL: options.baseURL,
-          model: options.model,
-        });
+    /**
+     * 真实链路约束：
+     * - 仅在显式测试模式 useFakeLlm=true 时允许 Fake LLM；
+     * - 非测试模式必须提供 API Key，禁止无 key 时自动回退演示数据。
+     */
+    if (options.useFakeLlm) {
+      this.llm = new FakeAgentLlm();
+      return;
+    }
+    if (!options.apiKey) {
+      throw new Error("未配置真实模型 API Key，已禁用 Fake 回退。请设置 OPENAI_API_KEY 或显式启用 SKILL_AGENT_USE_FAKE_LLM=1。");
+    }
+    this.llm = new LlamaIndexAgentLlm({
+      apiKey: options.apiKey,
+      baseURL: options.baseURL,
+      model: options.model,
+    });
   }
 
   /**
@@ -70,7 +83,7 @@ export class ChatService {
 
     const systemPrompt = this.buildSystemPrompt(skills, documentCatalog);
 
-    yield { type: "meta", content: "已加载系统提示词、历史上下文和 skill 列表" };
+    yield { type: "meta", content: this.sanitizeOutputText("已加载系统提示词、历史上下文和 skill 列表") };
 
     const skillDecision = await this.llm.judgeSkill({
       userMessage,
@@ -93,18 +106,22 @@ export class ChatService {
       const financialIntent: FinancialIntent = financialIntentDecision.intent;
       /** 提取与分析输出文件路径。 */
       const outputPaths = buildFinancialOutputPaths(this.projectRoot, financialIntentDecision.matchedPdf);
+      /** 表格提取范围：资产负债分析优先指定资产负债表，泛化提取走全量。 */
+      const requestedTableScope = financialIntent === "financial_data_extraction" ? "ALL" : "资产负债表";
       await fs.mkdir(path.dirname(outputPaths.extractJsonPath), { recursive: true });
 
       yield {
         type: "meta",
-        content: `financialIntent=${financialIntent} file=${financialIntentDecision.matchedPdf.relativePath}`,
+        content: this.sanitizeOutputText(
+          `financialIntent=${financialIntent} file=${financialIntentDecision.matchedPdf.relativePath}`,
+        ),
       };
 
       /** 第一步：先从财报 PDF 提取结构化数据。 */
       const extractExecution = await this.executeSkillWithFailureStage({
         skillName: "pdf_financial_extract",
         scriptPath: "scripts/extract_financial_tables.py",
-        args: [financialIntentDecision.matchedPdf.absolutePath, outputPaths.extractJsonPath],
+        args: [financialIntentDecision.matchedPdf.absolutePath, outputPaths.extractJsonPath, requestedTableScope],
       });
       /** 第二步：在提取结果基础上执行资产负债分析。 */
       const analysisExecution = await this.executeSkillWithFailureStage({
@@ -114,13 +131,52 @@ export class ChatService {
       });
       yield {
         type: "meta",
-        content: "financialChain=pdf_financial_extract->financial_statement_analysis",
+        content: this.sanitizeOutputText("financialChain=pdf_financial_extract->financial_statement_analysis"),
       };
 
       const analysisRaw = await fs.readFile(outputPaths.analysisJsonPath, "utf-8");
       const analysisParsed = JSON.parse(analysisRaw) as {
         summary?: { overall_view?: string; top_signal?: string };
       };
+      const extractRaw = await fs.readFile(outputPaths.extractJsonPath, "utf-8");
+      const extractParsed = JSON.parse(extractRaw) as {
+        table_sections?: {
+          requested_scope?: string;
+          selected_tables?: Array<{ title_guess?: string; quality?: { row_count?: number; column_count?: number } }>;
+          all_tables?: Array<{ title_guess?: string; quality?: { row_count?: number; column_count?: number } }>;
+          unmatched_request?: string | null;
+        };
+      };
+      /** 表格提取摘要：用于前端可视化提示和模型上下文补强。 */
+      const requestedScope = extractParsed.table_sections?.requested_scope ?? requestedTableScope;
+      const selectedTables = extractParsed.table_sections?.selected_tables ?? [];
+      const allTables = extractParsed.table_sections?.all_tables ?? [];
+      const unmatchedRequest = extractParsed.table_sections?.unmatched_request ?? null;
+      const selectedTitles = selectedTables.slice(0, 5).map((table) => table.title_guess ?? "未命名表格").join(" | ");
+      const tableExtractionSummary = [
+        `requestedScope=${requestedScope}`,
+        `selectedTableCount=${selectedTables.length}`,
+        `allTableCount=${allTables.length}`,
+        `selectedTableTitles=${selectedTitles || "无"}`,
+      ].join("\n");
+      /**
+       * 向前端发送结构化表格数据事件：
+       * - 优先 selected_tables（命中用户指定范围）；
+       * - 同时保留 all_tables（支持“提取全部表格”展示）。
+       */
+      yield {
+        type: "table_data",
+        content: JSON.stringify({
+          requested_scope: requestedScope,
+          selected_tables: selectedTables,
+          all_tables: allTables,
+          unmatched_request: unmatchedRequest,
+        }),
+      };
+      yield { type: "meta", content: this.sanitizeOutputText(`tableExtractionSummary ${tableExtractionSummary.replace(/\n/g, " ")}`) };
+      if (unmatchedRequest) {
+        yield { type: "meta", content: this.sanitizeOutputText(unmatchedRequest) };
+      }
       /** 分析摘要文本用于回注到最终回答上下文。 */
       const analysisSummary = [
         `overall=${analysisParsed.summary?.overall_view ?? "暂无分析概述"}`,
@@ -129,7 +185,7 @@ export class ChatService {
 
       if (financialIntent === "investment_value_analysis") {
         financialScopeDisclaimer = "当前结论基于资产负债表维度，不含利润表、现金流和估值模型。";
-        yield { type: "meta", content: financialScopeDisclaimer };
+        yield { type: "meta", content: this.sanitizeOutputText(financialScopeDisclaimer) };
       }
 
       skillResultBlock = [
@@ -146,6 +202,10 @@ export class ChatService {
         `exitCode=${analysisExecution.exitCode}`,
         `stdout=${analysisExecution.stdout.slice(0, 1500)}`,
         `stderr=${analysisExecution.stderr.slice(0, 800)}`,
+        "[TABLE_EXTRACTION_SUMMARY]",
+        tableExtractionSummary,
+        unmatchedRequest ? `unmatchedRequest=${unmatchedRequest}` : "",
+        "[/TABLE_EXTRACTION_SUMMARY]",
         "[FINANCIAL_ANALYSIS_SUMMARY]",
         analysisSummary,
         "[/FINANCIAL_ANALYSIS_SUMMARY]",
@@ -170,22 +230,24 @@ export class ChatService {
       }
 
       if (autoSkillDecision) {
-        yield { type: "meta", content: `已按文件类型自动路由 skill: ${selectedSkill.skillName}` };
+        yield { type: "meta", content: this.sanitizeOutputText(`已按文件类型自动路由 skill: ${selectedSkill.skillName}`) };
         await ensureAutoSkillOutputPath(autoSkillDecision);
       } else {
-        yield { type: "meta", content: `已触发 skill: ${selectedSkill.skillName}` };
+        yield { type: "meta", content: this.sanitizeOutputText(`已触发 skill: ${selectedSkill.skillName}`) };
       }
 
       const scriptArgs = this.resolveScriptArgs(selectedSkill.args ?? [], documentCatalog);
       yield {
         type: "meta",
-        content: [
-          "skillDecision:",
-          `skillTriggerSource=${triggerSource}`,
-          `skillName=${selectedSkill.skillName}`,
-          `scriptPath=${selectedSkill.scriptPath}`,
-          `resolvedArgs=${JSON.stringify(scriptArgs)}`,
-        ].join(" "),
+        content: this.sanitizeOutputText(
+          [
+            "skillDecision:",
+            `skillTriggerSource=${triggerSource}`,
+            `skillName=${selectedSkill.skillName}`,
+            `scriptPath=${selectedSkill.scriptPath}`,
+            `resolvedArgs=${JSON.stringify(scriptArgs)}`,
+          ].join(" "),
+        ),
       };
 
       const execution = await this.executeSkillWithFailureStage({
@@ -212,7 +274,9 @@ export class ChatService {
       }
       yield {
         type: "meta",
-        content: `skillExecutionConfirmed=true skillName=${selectedSkill.skillName} exitCode=${execution.exitCode}`,
+        content: this.sanitizeOutputText(
+          `skillExecutionConfirmed=true skillName=${selectedSkill.skillName} exitCode=${execution.exitCode}`,
+        ),
       };
 
       let parsedPreview = "";
@@ -258,8 +322,9 @@ export class ChatService {
 
     let assistantContent = "";
     for await (const chunk of stream) {
-      assistantContent += chunk;
-      yield { type: "chunk", content: chunk };
+      const sanitizedChunk = this.sanitizeOutputText(chunk);
+      assistantContent += sanitizedChunk;
+      yield { type: "chunk", content: sanitizedChunk };
     }
 
     const nextHistory: SessionMessage[] = [
@@ -286,11 +351,20 @@ export class ChatService {
       "必须先理解历史上下文，再判断是否调用 skill。",
       "如果识别到 files 目录文档，优先按文档类型自动调用 skill。",
       "如果调用 skill，需要利用脚本执行结果和解析摘要进行回答。",
+      "全链路文本输出禁止使用任何 emoji、小图标或装饰符号，仅使用纯文本表达。",
       "可用 skills: ",
       skillList,
       "files 文档清单: ",
       documentList,
     ].join("\n");
+  }
+
+  /**
+   * 输出文本净化：剔除 emoji/小图标，同时保留原有文本换行与空白。
+   * 适用范围：meta / chunk / error 文本的最终输出兜底。
+   */
+  private sanitizeOutputText(content: string): string {
+    return content.replace(this.emojiRegex, "");
   }
 
   /**

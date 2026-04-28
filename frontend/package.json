@@ -16,6 +16,9 @@
     "lint:eslint": "eslint . --fix --cache"
   },
   "dependencies": {
+    "@chenglou/pretext": "^0.0.6",
+    "dompurify": "^3.4.1",
+    "markdown-it": "^14.1.1",
     "vue": "^3.5.32",
     "vue-router": "^5.0.4"
   },
@@ -23,6 +26,7 @@
     "@playwright/test": "^1.59.1",
     "@tsconfig/node24": "^24.0.4",
     "@types/jsdom": "^28.0.1",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^24.12.2",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vitest/eslint-plugin": "^1.6.16",

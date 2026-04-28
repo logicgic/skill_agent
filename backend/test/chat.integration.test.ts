@@ -115,6 +115,9 @@ describe("chat integration", () => {
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain("financialIntent=balance_sheet_analysis");
     expect(response.body).toContain("financialChain=pdf_financial_extract->financial_statement_analysis");
+    expect(response.body).toContain("tableExtractionSummary");
+    expect(response.body).toContain("selectedTableCount=");
+    expect(response.body).toContain("\"type\":\"table_data\"");
   });
 
   test("adds scope disclaimer for investment-value intent", async () => {
@@ -130,5 +133,25 @@ describe("chat integration", () => {
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain("financialIntent=investment_value_analysis");
     expect(response.body).toContain("当前结论基于资产负债表维度");
+  });
+
+  test("sanitizes emoji from full-chain stream output", async () => {
+    /**
+     * 该用例使用真实接口流式输出，校验后端兜底净化逻辑：
+     * 即使用户输入包含 emoji，最终输出中也不应出现 emoji 字符。
+     */
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/chat/stream",
+      payload: {
+        sessionId: "integration-no-emoji-output",
+        message: "请总结这个请求 😀 并给出两点建议 🚀",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("data:");
+    expect(response.body).not.toContain("😀");
+    expect(response.body).not.toContain("🚀");
   });
 });

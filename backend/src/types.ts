@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 单条聊天消息的数据结构。
  */
 export interface SessionMessage {
@@ -13,7 +13,7 @@ export interface SessionMessage {
  */
 export interface StreamEvent {
   /** 事件类型，前端根据类型决定如何渲染。 */
-  type: "meta" | "chunk" | "done" | "error";
+  type: "meta" | "chunk" | "done" | "error" | "table_data";
   /** 事件文本内容。 */
   content: string;
 }
