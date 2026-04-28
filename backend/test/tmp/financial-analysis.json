@@ -1,0 +1,23 @@
+{
+  "summary": {
+    "overall_view": "分析基于资产负债表维度，聚焦资产质量、偿债能力和潜在会计风险。",
+    "signal_count": 1,
+    "top_signal": "未触发高风险规则，建议结合多期报表继续跟踪。"
+  },
+  "metrics": {
+    "cash_to_short_debt": 1665963894.094516,
+    "receivables_ratio": 0.00012988958312277606,
+    "inventory_ratio": 0.1880932998560227,
+    "liability_ratio": 0.1465926830666913,
+    "goodwill_ratio": null,
+    "construction_ratio": 5.816782523611164e-11
+  },
+  "signals": [
+    {
+      "rule_id": "base_info_001",
+      "level": "info",
+      "message": "未触发高风险规则，建议结合多期报表继续跟踪。"
+    }
+  ],
+  "risks": []
+}
