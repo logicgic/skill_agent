@@ -5,11 +5,17 @@ import type { SkillPlan } from "./skill-plan.js";
 
 /**
  * 支持自动路由的文档类型。
+ *
+ * @remarks
+ * 自动路由仅覆盖结构化办公文档与 PDF。
  */
 export type SupportedDocumentType = "pdf" | "docx" | "xlsx";
 
 /**
- * files 目录中的单个文档项。
+ * `files` 目录中的单个文档项。
+ *
+ * @remarks
+ * 结构体同时包含绝对路径与相对路径，便于执行和日志展示。
  */
 export interface DocumentEntry {
   /** 文档绝对路径。 */
@@ -25,7 +31,10 @@ export interface DocumentEntry {
 }
 
 /**
- * files 文档目录分类结果。
+ * `files` 文档目录分类结果。
+ *
+ * @remarks
+ * `documents` 保留全量，`byType` 提供按类型快速索引。
  */
 export interface DocumentCatalog {
   /** 全量可识别文档。 */
@@ -36,6 +45,9 @@ export interface DocumentCatalog {
 
 /**
  * 自动路由 skill 的决策结果。
+ *
+ * @remarks
+ * 该结构用于单步调用场景，也可作为多步计划的第一步来源。
  */
 export interface AutoSkillDecision {
   /** 选中的 skill 名称。 */
@@ -52,6 +64,9 @@ export interface AutoSkillDecision {
 
 /**
  * 自动路由生成的多步计划结果。
+ *
+ * @remarks
+ * 包含执行计划与命中文档，便于后续展示和调试。
  */
 export interface AutoSkillPlanDecision {
   /** 自动路由生成的计划。 */
@@ -62,6 +77,9 @@ export interface AutoSkillPlanDecision {
 
 /**
  * 递归扫描目录下全部文件路径。
+ *
+ * @param directory 待扫描目录绝对路径。
+ * @returns 扫描到的文件绝对路径数组。
  */
 const walkFiles = async (directory: string): Promise<string[]> => {
   const entries = await fs.readdir(directory, { withFileTypes: true });
@@ -81,6 +99,9 @@ const walkFiles = async (directory: string): Promise<string[]> => {
 
 /**
  * 将扩展名映射为支持的文档类型。
+ *
+ * @param extension 文件扩展名（小写、含点）。
+ * @returns 支持的文档类型；未支持则返回 `null`。
  */
 const toSupportedType = (extension: string): SupportedDocumentType | null => {
   if (extension === ".pdf") {
@@ -97,12 +118,18 @@ const toSupportedType = (extension: string): SupportedDocumentType | null => {
 
 /**
  * 统一文件名，避免输出文件名包含非法字符。
+ *
+ * @param baseName 原始文件名（不含扩展名）。
+ * @returns 规范化后的文件名。
  */
 const normalizeBaseName = (baseName: string): string =>
   baseName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/\s+/g, "_");
 
 /**
- * 构建 files 目录分类目录。
+ * 构建 `files` 目录分类索引。
+ *
+ * @param projectRoot 后端项目根目录绝对路径。
+ * @returns 结构化文档目录索引。
  */
 export const buildDocumentCatalog = async (projectRoot: string): Promise<DocumentCatalog> => {
   const filesDirectory = path.join(projectRoot, "files");
@@ -139,6 +166,10 @@ export const buildDocumentCatalog = async (projectRoot: string): Promise<Documen
 
 /**
  * 依据用户消息匹配可能要读取的文件。
+ *
+ * @param userMessage 用户输入消息。
+ * @param catalog 文档目录索引。
+ * @returns 命中的文档；未命中返回 `null`。
  */
 const matchDocumentByMessage = (userMessage: string, catalog: DocumentCatalog): DocumentEntry | null => {
   const normalizedMessage = userMessage.toLowerCase();
@@ -166,6 +197,10 @@ const matchDocumentByMessage = (userMessage: string, catalog: DocumentCatalog): 
 
 /**
  * 根据消息和文档目录，自动生成 skill 调用决策。
+ *
+ * @param input 路由输入（用户消息、文档目录、项目路径）。
+ * @returns 自动技能决策；未命中返回 `null`。
+ * @remarks
  * 命中后由上层优先采用该决策（高于 LLM 路由）。
  */
 export const decideAutoSkillByDocument = (input: {
@@ -217,6 +252,9 @@ export const decideAutoSkillByDocument = (input: {
 
 /**
  * 自动路由生成多步 skill 计划。
+ *
+ * @param input 路由输入（用户消息、文档目录、项目路径）。
+ * @returns 自动生成的多步计划；未命中返回 `null`。
  */
 export const buildAutoSkillPlanByDocument = (input: {
   userMessage: string;
@@ -274,6 +312,10 @@ export const buildAutoSkillPlanByDocument = (input: {
 
 /**
  * 读取并格式化解析结果摘要，回填给模型使用。
+ *
+ * @param decision 自动路由技能决策。
+ * @returns 解析摘要文本。
+ * @throws 当目标解析产物不可读取或格式异常时抛出错误。
  */
 export const buildParsedResultPreview = async (decision: AutoSkillDecision): Promise<string> => {
   if (decision.skillName === "pdf_content_extract") {
@@ -307,6 +349,9 @@ export const buildParsedResultPreview = async (decision: AutoSkillDecision): Pro
 
 /**
  * 确保自动路由技能的输出目录存在。
+ *
+ * @param decision 自动路由技能决策。
+ * @returns 无返回值；在必要时创建输出目录。
  */
 export const ensureAutoSkillOutputPath = async (decision: AutoSkillDecision): Promise<void> => {
   if (decision.skillName === "pdf_content_extract") {

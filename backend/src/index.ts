@@ -5,7 +5,9 @@ import { resolveBackendEnvPath, resolveBackendRootFromModuleUrl } from "./path-m
 import { runPythonDependencyHealthCheck } from "./skill/skill-health.js";
 
 /**
- * 启动 HTTP 服务。
+ * 启动 HTTP 服务并打印启动自检信息。
+ *
+ * @returns 一个在服务异常时会 reject 的 Promise。
  */
 const bootstrap = async (): Promise<void> => {
   const projectRoot = resolveBackendRootFromModuleUrl(import.meta.url);

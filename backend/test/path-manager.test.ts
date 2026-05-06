@@ -3,6 +3,12 @@ import { describe, expect, test } from "vitest";
 import { resolveBackendRootFromModuleUrl, resolveScriptArgPlaceholders } from "../src/path-manager.js";
 import type { DocumentCatalog } from "../src/chat/document-router.js";
 
+/**
+ * 路径管理工具测试。
+ *
+ * @remarks
+ * 验证根目录解析与参数占位符替换行为。
+ */
 describe("path manager", () => {
   test("resolves backend root from module url", () => {
     const root = resolveBackendRootFromModuleUrl(import.meta.url);

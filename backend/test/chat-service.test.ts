@@ -3,6 +3,12 @@ import type { SkillDefinition } from "../src/skill/skill-types.js";
 import type { DocumentCatalog } from "../src/chat/document-router.js";
 import { ChatService } from "../src/chat/chat-service.js";
 
+/**
+ * ChatService 系统提示词测试。
+ *
+ * @remarks
+ * 验证资产负债表分析路由提示是否被写入系统提示词。
+ */
 describe("chat service system prompt", () => {
   test("includes balance-sheet-analysis routing hint", () => {
     const service = new ChatService({

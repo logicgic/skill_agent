@@ -3,11 +3,17 @@ import type { DocumentCatalog, DocumentEntry } from "./document-router.js";
 
 /**
  * 财报隐式意图类型，用于驱动多 skill 串联编排。
+ *
+ * @remarks
+ * 标签用于决定是否追加财报后处理步骤。
  */
 export type FinancialIntent = "financial_data_extraction" | "balance_sheet_analysis" | "investment_value_analysis";
 
 /**
  * 财报意图识别结果，包含命中的文档和意图标签。
+ *
+ * @remarks
+ * 上层会把该结果转成自动 skill 执行计划。
  */
 export interface FinancialIntentDecision {
   /** 命中的财报 PDF 文档。 */
@@ -18,7 +24,11 @@ export interface FinancialIntentDecision {
 
 /**
  * 从用户消息中识别财报分析意图。
- * 规则：先识别投资价值，再识别资产负债表，最后是泛化数据提取。
+ *
+ * @param userMessage 用户输入消息。
+ * @returns 命中的财报意图；未命中返回 `null`。
+ * @remarks
+ * 规则优先级：投资价值 > 资产负债表 > 泛化数据提取。
  */
 export const detectFinancialIntent = (userMessage: string): FinancialIntent | null => {
   /** 统一小写字符串用于关键词匹配。 */
@@ -42,6 +52,10 @@ export const detectFinancialIntent = (userMessage: string): FinancialIntent | nu
 
 /**
  * 在文档目录中匹配财报 PDF，并组合出完整意图决策。
+ *
+ * @param userMessage 用户输入消息。
+ * @param catalog 文档目录索引。
+ * @returns 财报意图决策；不满足条件时返回 `null`。
  */
 export const decideFinancialIntentByMessage = (
   userMessage: string,
@@ -70,6 +84,10 @@ export const decideFinancialIntentByMessage = (
 
 /**
  * 生成财报提取与分析的默认中间产物路径。
+ *
+ * @param projectRoot 后端项目根目录绝对路径。
+ * @param matchedPdf 已命中的财报 PDF 文档。
+ * @returns 提取结果与分析结果的默认输出路径。
  */
 export const buildFinancialOutputPaths = (projectRoot: string, matchedPdf: DocumentEntry): {
   /** 财报提取结果文件路径。 */

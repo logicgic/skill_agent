@@ -7,7 +7,11 @@ import { loadSkills } from "./skill-loader.js";
 import type { SkillScriptRunInput, SkillScriptRunResult } from "./skill-types.js";
 
 /**
- * 解析脚本解释器，当前重点支持 Python 脚本。
+ * 根据脚本扩展名解析执行命令。
+ *
+ * @param scriptPath 脚本绝对路径。
+ * @returns 可执行命令与基础参数。
+ * @throws 当脚本类型不受支持时抛出错误。
  */
 const resolveScriptCommand = (scriptPath: string): { command: string; commandArgs: string[] } => {
   const extension = path.extname(scriptPath).toLowerCase();
@@ -31,12 +35,20 @@ const resolveScriptCommand = (scriptPath: string): { command: string; commandArg
 
 /**
  * 确保脚本路径没有逃逸 skill 目录。
+ *
+ * @param skillDirectory skill 根目录绝对路径。
+ * @param scriptPath 待执行脚本路径。
+ * @returns 校验后的脚本绝对路径。
  */
 const assertPathInsideSkill = (skillDirectory: string, scriptPath: string): string =>
   assertPathInsideRoot(skillDirectory, scriptPath, "脚本路径非法，超出 skill 目录");
 
 /**
  * 在受限上下文中执行 skill 脚本。
+ *
+ * @param input 脚本执行输入参数。
+ * @returns 脚本执行结果（退出码、标准输出、标准错误等）。
+ * @throws 当 skill 不存在、脚本非法或执行异常时抛出错误。
  */
 export const runSkillScript = async (input: SkillScriptRunInput): Promise<SkillScriptRunResult> => {
   const allSkills = await loadSkills(input.projectRoot);
@@ -101,7 +113,10 @@ export const runSkillScript = async (input: SkillScriptRunInput): Promise<SkillS
 };
 
 /**
- * 默认返回技能根目录，方便测试或其他模块复用。
+ * 返回技能根目录绝对路径。
+ *
+ * @param projectRoot 后端项目根目录绝对路径。
+ * @returns 官方 skill 根目录绝对路径。
  */
 export const getSkillRootDirectory = (projectRoot: string) => resolveSkillDirectory(projectRoot);
 

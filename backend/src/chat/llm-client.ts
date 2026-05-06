@@ -5,6 +5,9 @@ import type { SkillPlan } from "./skill-plan.js";
 
 /**
  * skill 调用决策结果。
+ *
+ * @remarks
+ * 该结构用于单步路由场景，与多步计划结构并行存在。
  */
 export interface SkillDecision {
   /** 是否调用 skill。 */
@@ -21,6 +24,9 @@ export interface SkillDecision {
 
 /**
  * 对 LLM 调用能力的抽象，便于真实模型与离线测试复用。
+ *
+ * @remarks
+ * 统一封装 skill 决策、计划生成和答案流式输出三个阶段。
  */
 export interface AgentLlm {
   /** 让模型判断是否需要调用 skill。 */
@@ -41,8 +47,17 @@ export interface AgentLlm {
 
 /**
  * 离线测试专用假 LLM。
+ *
+ * @remarks
+ * 使用规则匹配模拟路由与回答，避免依赖外部模型服务。
  */
 export class FakeAgentLlm implements AgentLlm {
+  /**
+   * 基于关键字生成单步 skill 决策。
+   *
+   * @param input 用户消息与可用技能列表。
+   * @returns skill 决策结果。
+   */
   async judgeSkill(input: { userMessage: string; skills: SkillDefinition[] }): Promise<SkillDecision> {
     const normalizedMessage = input.userMessage.toLowerCase();
 
@@ -72,6 +87,12 @@ export class FakeAgentLlm implements AgentLlm {
     };
   }
 
+  /**
+   * 根据单步决策组装最小可执行计划。
+   *
+   * @param input 用户消息与可用技能列表。
+   * @returns 多步计划；无需调用 skill 时返回 `null`。
+   */
   async judgeSkillPlan(input: { userMessage: string; skills: SkillDefinition[] }): Promise<SkillPlan | null> {
     const single = await this.judgeSkill(input);
     if (!single.shouldUseSkill || !single.skillName || !single.scriptPath) {
@@ -93,6 +114,12 @@ export class FakeAgentLlm implements AgentLlm {
     };
   }
 
+  /**
+   * 以固定分片长度模拟流式输出。
+   *
+   * @param input 聊天消息上下文。
+   * @returns 可异步迭代的文本分片流。
+   */
   async streamAnswer(input: { messages: ChatMessage[] }): Promise<AsyncIterable<string>> {
     const lastUserMessage = [...input.messages].reverse().find((message) => message.role === "user");
     const answer = `FakeLLM(session): 已处理请求 -> ${typeof lastUserMessage?.content === "string" ? lastUserMessage.content : ""}`;
@@ -108,11 +135,19 @@ export class FakeAgentLlm implements AgentLlm {
 
 /**
  * 基于 LlamaIndex OpenAI 封装的真实 LLM。
+ *
+ * @remarks
+ * 负责与外部模型 API 通信，并把返回值标准化为内部协议。
  */
 export class LlamaIndexAgentLlm implements AgentLlm {
   /** LlamaIndex OpenAI 客户端。 */
   private readonly llm: OpenAI;
 
+  /**
+   * 创建真实 LLM 客户端。
+   *
+   * @param config 模型接入参数（API Key、Base URL、模型名）。
+   */
   constructor(config: { apiKey: string; baseURL?: string; model: string }) {
     this.llm = new OpenAI({
       apiKey: config.apiKey,
@@ -122,6 +157,12 @@ export class LlamaIndexAgentLlm implements AgentLlm {
     });
   }
 
+  /**
+   * 调用模型执行单步 skill 决策。
+   *
+   * @param input 用户消息与可用技能列表。
+   * @returns 结构化 skill 决策结果。
+   */
   async judgeSkill(input: { userMessage: string; skills: SkillDefinition[] }): Promise<SkillDecision> {
     const judgePrompt = [
       "你是 skill 路由器，请仅输出 JSON。",
@@ -156,6 +197,12 @@ export class LlamaIndexAgentLlm implements AgentLlm {
     }
   }
 
+  /**
+   * 调用模型生成多步 skill 计划。
+   *
+   * @param input 用户消息与可用技能列表。
+   * @returns 标准化后的计划；不可用时返回 `null`。
+   */
   async judgeSkillPlan(input: { userMessage: string; skills: SkillDefinition[] }): Promise<SkillPlan | null> {
     const planPrompt = [
       "你是 skill 路由器，请仅输出 JSON。",
@@ -199,6 +246,12 @@ export class LlamaIndexAgentLlm implements AgentLlm {
     }
   }
 
+  /**
+   * 调用模型生成最终回答（流式）。
+   *
+   * @param input 聊天消息上下文。
+   * @returns 可异步迭代的模型增量输出流。
+   */
   async streamAnswer(input: { messages: ChatMessage[] }): Promise<AsyncIterable<string>> {
     const stream = await this.llm.chat({
       stream: true,

@@ -1,10 +1,13 @@
-﻿import { promises as fs } from "node:fs";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import { resolveSkillDirectory } from "../config.js";
 import type { SkillDefinition } from "./skill-types.js";
 
 /**
- * frontmatter 里我们只关心 name/description 两个字段。
+ * frontmatter 中需要读取的最小字段集。
+ *
+ * @remarks
+ * 当前仅抽取 `name` 与 `description`，其余字段会被忽略。
  */
 interface SkillFrontmatter {
   /** skill 唯一名称。 */
@@ -14,7 +17,11 @@ interface SkillFrontmatter {
 }
 
 /**
- * 从 SKILL.md 中提取 frontmatter。
+ * 从 `SKILL.md` 文本中提取 frontmatter。
+ *
+ * @param markdown `SKILL.md` 原始内容。
+ * @returns 解析得到的 `name/description` 字段。
+ * @throws 当 frontmatter 缺失或关键字段不完整时抛出错误。
  */
 const parseFrontmatter = (markdown: string): SkillFrontmatter => {
   const frontmatterMatch = markdown.match(/^---\n([\s\S]*?)\n---/);
@@ -47,7 +54,10 @@ const parseFrontmatter = (markdown: string): SkillFrontmatter => {
 };
 
 /**
- * 加载项目中所有符合官方结构（目录下有 SKILL.md）的 skill。
+ * 加载项目中所有符合官方结构（目录下有 `SKILL.md`）的 skill。
+ *
+ * @param projectRoot 后端项目根目录绝对路径。
+ * @returns 已排序的 skill 定义列表。
  */
 export const loadSkills = async (projectRoot: string): Promise<SkillDefinition[]> => {
   const skillRootDirectory = resolveSkillDirectory(projectRoot);

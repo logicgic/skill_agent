@@ -5,10 +5,12 @@ import pluginPlaywright from 'eslint-plugin-playwright'
 import pluginVitest from '@vitest/eslint-plugin'
 import pluginOxlint from 'eslint-plugin-oxlint'
 
-// To allow more languages other than `ts` in `.vue` files, uncomment the following lines:
-// import { configureVueProject } from '@vue/eslint-config-typescript'
-// configureVueProject({ scriptLangs: ['ts', 'tsx'] })
-// More info at https://github.com/vuejs/eslint-config-typescript/#advanced-setup
+/**
+ * 前端 ESLint Flat 配置。
+ *
+ * @remarks
+ * 统一组合 Vue、TypeScript、Playwright、Vitest 与 Oxlint 规则集。
+ */
 
 export default defineConfigWithVueTs(
   {

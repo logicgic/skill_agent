@@ -2,6 +2,12 @@ import process from 'node:process'
 import { defineConfig, devices } from '@playwright/test'
 
 /**
+ * 前端 Playwright 端到端测试配置。
+ *
+ * @remarks
+ * 本地默认使用 dev server，CI 环境切换到 preview server。
+ */
+/**
  * Read environment variables from file.
  * https://github.com/motdotla/dotenv
  */

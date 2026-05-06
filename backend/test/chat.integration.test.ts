@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { createServer } from "../src/server.js";
 
+/**
+ * 聊天接口集成测试。
+ *
+ * @remarks
+ * 在真实服务实例上验证 SSE、自动路由、错误处理和财报链路行为。
+ */
 const projectRoot = "d:/vscode project/FIN_AGENT/skill_agent/backend";
 
 describe("chat integration", () => {

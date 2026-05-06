@@ -7,6 +7,12 @@ import {
   type DocumentCatalog,
 } from "../src/chat/document-router.js";
 
+/**
+ * 文档自动路由测试。
+ *
+ * @remarks
+ * 覆盖目录构建、文件匹配、自动决策与多步计划生成行为。
+ */
 const projectRoot = "d:/vscode project/FIN_AGENT/skill_agent/backend";
 
 describe("document router", () => {

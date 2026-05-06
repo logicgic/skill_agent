@@ -2,6 +2,12 @@ import { describe, expect, test } from "vitest";
 import { buildDocumentCatalog } from "../src/chat/document-router.js";
 import { decideFinancialIntentByMessage, detectFinancialIntent } from "../src/chat/financial-intent.js";
 
+/**
+ * 财报意图识别测试。
+ *
+ * @remarks
+ * 验证隐式语义识别和文档命中决策行为。
+ */
 const projectRoot = "d:/vscode project/FIN_AGENT/skill_agent/backend";
 
 describe("financial intent router", () => {

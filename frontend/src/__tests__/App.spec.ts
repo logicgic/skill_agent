@@ -1,7 +1,13 @@
-﻿﻿import { describe, it, expect } from 'vitest'
+﻿import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import App from '../App.vue'
 
+/**
+ * App 组件渲染测试。
+ *
+ * @remarks
+ * 验证聊天页核心交互元素是否存在。
+ */
 describe('App', () => {
   it('renders chat input and send button', () => {
     const wrapper = mount(App)

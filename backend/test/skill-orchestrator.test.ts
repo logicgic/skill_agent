@@ -3,6 +3,12 @@ import { describe, expect, test } from "vitest";
 import { buildDocumentCatalog } from "../src/chat/document-router.js";
 import { runSkillPlan } from "../src/chat/skill-orchestrator.js";
 
+/**
+ * Skill 计划编排测试。
+ *
+ * @remarks
+ * 验证顺序执行、失败继续与无脚本步骤跳过逻辑。
+ */
 const projectRoot = "d:/vscode project/FIN_AGENT/skill_agent/backend";
 
 describe("skill orchestrator", () => {

@@ -2,6 +2,10 @@ import { spawn } from "node:child_process";
 
 /**
  * 启动时检查 Python 解释器与关键依赖是否可用。
+ *
+ * @returns 适合日志展示的健康检查结果文本。
+ * @remarks
+ * 该检查不会抛错中断启动，而是返回可观测诊断信息供上层打印。
  */
 export const runPythonDependencyHealthCheck = async (): Promise<string> => {
   const pythonCommand = process.env.PYTHON_BIN ?? "python";

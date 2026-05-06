@@ -21,6 +21,9 @@ import type { SkillPlan } from "./skill-plan.js";
 
 /**
  * 聊天服务构造参数。
+ *
+ * @remarks
+ * 用于初始化模型客户端与项目级上下文。
  */
 export interface ChatServiceOptions {
   /** 项目根目录。 */
@@ -37,6 +40,9 @@ export interface ChatServiceOptions {
 
 /**
  * 多轮会话 + skill 路由编排服务。
+ *
+ * @remarks
+ * 负责串联文档自动路由、计划执行和最终模型回答。
  */
 export class ChatService {
   /** 会话历史存储器。 */
@@ -46,6 +52,11 @@ export class ChatService {
   /** 项目根目录。 */
   private readonly projectRoot: string;
 
+  /**
+   * 创建聊天服务实例。
+   *
+   * @param options 聊天服务构造参数。
+   */
   constructor(private readonly options: ChatServiceOptions) {
     this.projectRoot = options.projectRoot;
 
@@ -60,6 +71,10 @@ export class ChatService {
 
   /**
    * 处理一轮对话并产出流式事件。
+   *
+   * @param sessionId 会话唯一标识。
+   * @param userMessage 用户输入消息。
+   * @returns 可异步迭代的流式事件序列。
    */
   async *chat(sessionId: string, userMessage: string): AsyncIterable<StreamEvent> {
     const skills = await loadSkills(this.projectRoot);
@@ -194,6 +209,10 @@ export class ChatService {
 
   /**
    * 合并自动路由与 LLM 计划，自动路由优先，LLM 计划补充去重步骤。
+   *
+   * @param autoPlan 自动路由生成的计划。
+   * @param llmPlan LLM 生成的计划。
+   * @returns 合并后的计划；当两者均为空时返回 `null`。
    */
   private mergeSkillPlans(autoPlan: SkillPlan | null, llmPlan: SkillPlan | null): SkillPlan | null {
     if (!autoPlan && !llmPlan) {
@@ -225,6 +244,10 @@ export class ChatService {
 
   /**
    * 构建系统提示词：包含会话规范和可用 skills。
+   *
+   * @param skills 当前可用技能列表。
+   * @param documentCatalog 当前文档目录索引。
+   * @returns 系统提示词字符串。
    */
   private buildSystemPrompt(skills: SkillDefinition[], documentCatalog: DocumentCatalog): string {
     const skillList = skills.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n");
@@ -247,6 +270,11 @@ export class ChatService {
 
   /**
    * 将占位符参数替换成测试数据路径。
+   *
+   * @param args 待替换参数数组。
+   * @param catalog 文档目录索引。
+   * @returns 占位符替换后的参数数组。
+   * @throws 当必要文档缺失导致占位符无法替换时抛出错误。
    */
   private resolveScriptArgs(args: string[], catalog: DocumentCatalog): string[] {
     try {
@@ -262,6 +290,10 @@ export class ChatService {
 
   /**
    * 统一执行 skill，并把失败阶段归一化为 spawn/runtime。
+   *
+   * @param input skill 执行输入参数。
+   * @returns 脚本执行结果。
+   * @throws 当脚本启动或运行失败时抛出阶段化错误。
    */
   private async executeSkillWithFailureStage(input: {
     /** 需要执行的 skill 名称。 */
@@ -307,6 +339,9 @@ export class ChatService {
 
 /**
  * 清理测试输出文件，避免目录堆积。
+ *
+ * @param projectRoot 后端项目根目录绝对路径。
+ * @returns 无返回值；按需删除既有产物目录。
  */
 export const cleanupGeneratedFiles = async (projectRoot: string): Promise<void> => {
   const generatedFiles = [

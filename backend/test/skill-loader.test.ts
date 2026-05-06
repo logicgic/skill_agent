@@ -1,6 +1,12 @@
 import { describe, expect, test } from "vitest";
 import { loadSkills } from "../src/skill/skill-loader.js";
 
+/**
+ * Skill 加载器测试。
+ *
+ * @remarks
+ * 校验官方 skill 结构读取与 frontmatter 提取结果。
+ */
 const projectRoot = "d:/vscode project/FIN_AGENT/skill_agent/backend";
 
 describe("skill loader", () => {

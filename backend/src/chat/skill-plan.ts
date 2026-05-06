@@ -1,5 +1,8 @@
 /**
  * 单个编排步骤定义。
+ *
+ * @remarks
+ * 每个步骤对应一次 skill 调用或一个无脚本占位步骤。
  */
 export interface SkillStep {
   /** 步骤唯一 ID。 */
@@ -18,6 +21,9 @@ export interface SkillStep {
 
 /**
  * 单轮对话的 skill 执行计划。
+ *
+ * @remarks
+ * 计划由自动路由、LLM 或二者混合生成。
  */
 export interface SkillPlan {
   /** 计划中的步骤列表。 */
@@ -27,4 +33,3 @@ export interface SkillPlan {
   /** 计划说明。 */
   planReason: string;
 }
-

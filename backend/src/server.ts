@@ -4,7 +4,10 @@ import { z } from "zod";
 import { ChatService } from "./chat/chat-service.js";
 
 /**
- * 创建 Fastify 服务实例。
+ * 创建 Fastify 服务实例并注册聊天流式接口。
+ *
+ * @param options 服务启动参数（项目根目录、模型配置等）。
+ * @returns 已完成路由注册的 Fastify 实例。
  */
 export const createServer = (options: {
   projectRoot: string;

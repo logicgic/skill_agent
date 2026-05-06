@@ -1,5 +1,8 @@
 /**
  * 单个 Skill 的元信息。
+ *
+ * @remarks
+ * 由 `SKILL.md` 的 frontmatter 和文件路径共同构成。
  */
 export interface SkillDefinition {
   /** Skill 名称（来自 SKILL.md frontmatter）。 */
@@ -14,6 +17,9 @@ export interface SkillDefinition {
 
 /**
  * Skill 脚本执行输入参数。
+ *
+ * @remarks
+ * 该对象用于统一脚本执行上下文，便于审计与测试复用。
  */
 export interface SkillScriptRunInput {
   /** 项目根目录。 */
@@ -30,6 +36,9 @@ export interface SkillScriptRunInput {
 
 /**
  * Skill 脚本执行结果。
+ *
+ * @remarks
+ * 返回值保留命令与输出细节，供上层进行链路可观测和错误归因。
  */
 export interface SkillScriptRunResult {
   /** 进程退出码。 */
