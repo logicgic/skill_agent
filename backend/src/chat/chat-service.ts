@@ -7,6 +7,7 @@ import { runSkillScript } from "../skill/skill-sandbox.js";
 import type { SessionMessage, StreamEvent } from "../types.js";
 import { FakeAgentLlm, LlamaIndexAgentLlm, type AgentLlm } from "./llm-client.js";
 import {
+  buildAutoSkillPlanByDocument,
   buildDocumentCatalog,
   buildParsedResultPreview,
   decideAutoSkillByDocument,
@@ -15,7 +16,8 @@ import {
 } from "./document-router.js";
 import { SessionStore } from "./session-store.js";
 import { resolveScriptArgPlaceholders } from "../path-manager.js";
-import { buildFinancialOutputPaths, detectFinancialIntent } from "./financial-intent.js";
+import { runSkillPlan } from "./skill-orchestrator.js";
+import type { SkillPlan } from "./skill-plan.js";
 
 /**
  * 聊天服务构造参数。
@@ -68,7 +70,7 @@ export class ChatService {
 
     yield { type: "meta", content: "已加载系统提示词、历史上下文和 skill 列表" };
 
-    const skillDecision = await this.llm.judgeSkill({
+    const llmSkillPlan = await this.llm.judgeSkillPlan({
       userMessage,
       skills,
     });
@@ -77,120 +79,55 @@ export class ChatService {
       catalog: documentCatalog,
       projectRoot: this.projectRoot,
     });
-    /** 财报分析意图标记，用于触发提取后的二阶段分析。 */
-    const financialIntent = detectFinancialIntent(userMessage);
+    const autoSkillPlanDecision = buildAutoSkillPlanByDocument({
+      userMessage,
+      catalog: documentCatalog,
+      projectRoot: this.projectRoot,
+    });
     let skillResultBlock = "";
-    if (autoSkillDecision || (skillDecision.shouldUseSkill && skillDecision.skillName && skillDecision.scriptPath)) {
-      // 触发契约：自动路由命中时优先，LLM 决策仅作后备。
-      const triggerSource = autoSkillDecision ? "auto" : "llm";
-      const selectedSkill = autoSkillDecision
-        ? {
-            shouldUseSkill: true,
-            skillName: autoSkillDecision.skillName,
-            scriptPath: autoSkillDecision.scriptPath,
-            args: autoSkillDecision.args,
-            reason: autoSkillDecision.reason,
-          }
-        : skillDecision;
-      if (!selectedSkill.skillName || !selectedSkill.scriptPath) {
-        throw new Error("failureStage=route\nskill 决策缺少必要字段");
-      }
-
+    const finalSkillPlan = this.mergeSkillPlans(autoSkillPlanDecision?.plan ?? null, llmSkillPlan);
+    if (finalSkillPlan && finalSkillPlan.steps.length > 0) {
       if (autoSkillDecision) {
-        yield { type: "meta", content: `已按文件类型自动路由 skill: ${selectedSkill.skillName}` };
         await ensureAutoSkillOutputPath(autoSkillDecision);
-      } else {
-        yield { type: "meta", content: `已触发 skill: ${selectedSkill.skillName}` };
       }
-
-      const scriptArgs = this.resolveScriptArgs(selectedSkill.args ?? [], documentCatalog);
       yield {
         type: "meta",
-        content: [
-          "skillDecision:",
-          `skillTriggerSource=${triggerSource}`,
-          `skillName=${selectedSkill.skillName}`,
-          `scriptPath=${selectedSkill.scriptPath}`,
-          `resolvedArgs=${JSON.stringify(scriptArgs)}`,
-        ].join(" "),
+        content: `skillPlanSteps=${finalSkillPlan.steps.length} skillTriggerSource=${finalSkillPlan.triggerSource}`,
       };
 
-      const execution = await this.executeSkillWithFailureStage({
-        skillName: selectedSkill.skillName,
-        scriptPath: selectedSkill.scriptPath,
-        args: scriptArgs,
+      const stepMetaEvents: string[] = [];
+      const planExecution = await runSkillPlan({
+        projectRoot: this.projectRoot,
+        catalog: documentCatalog,
+        plan: finalSkillPlan,
+        continueOnError: true,
+        onStepEvent: (event) => {
+          if (event.type === "step_started") {
+            stepMetaEvents.push(`skillStepStarted=${event.step.id} stepIndex=${event.index}`);
+            return;
+          }
+          if (event.type === "step_completed") {
+            stepMetaEvents.push(`skillStepCompleted=${event.step.id} stepIndex=${event.index}`);
+            return;
+          }
+          if (event.type === "step_skipped") {
+            stepMetaEvents.push(`skillStepSkipped=${event.step.id} stepIndex=${event.index}`);
+            return;
+          }
+          stepMetaEvents.push(`skillStepFailed=${event.step.id} stepIndex=${event.index}`);
+        },
       });
-
-      if (execution.exitCode !== 0) {
-        const stderrSummary = execution.stderr.trim().slice(0, 500);
-        const stdoutSummary = execution.stdout.trim().slice(0, 300);
-        throw new Error(
-          [
-            "failureStage=runtime",
-            `Skill 执行失败: ${selectedSkill.skillName}`,
-            `exitCode=${execution.exitCode}`,
-            `command=${execution.command} ${execution.commandArgs.join(" ")}`,
-            stderrSummary ? `stderr=${stderrSummary}` : "",
-            !stderrSummary && stdoutSummary ? `stdout=${stdoutSummary}` : "",
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        );
-      }
-      yield {
-        type: "meta",
-        content: `skillExecutionConfirmed=true skillName=${selectedSkill.skillName} exitCode=${execution.exitCode}`,
-      };
-
-      /** 二阶段分析：财报分析请求命中 PDF 提取后，继续执行资产负债表分析脚本。 */
-      let financialAnalysisBlock = "";
-      const shouldRunFinancialAnalysis = selectedSkill.skillName === "pdf_content_extract" && financialIntent !== null;
-      if (shouldRunFinancialAnalysis) {
-        const extractOutputPath = scriptArgs[1];
-        const matchedPdf = autoSkillDecision?.matchedDocument ?? documentCatalog.byType.pdf[0];
-        if (extractOutputPath && matchedPdf) {
-          const outputPaths = buildFinancialOutputPaths(this.projectRoot, matchedPdf);
-          const analysisExecution = await this.executeSkillWithFailureStage({
-            skillName: "pdf_content_extract",
-            scriptPath: "scripts/analyze_balance_sheet_from_extract.py",
-            args: [extractOutputPath, outputPaths.analysisJsonPath],
-          });
-          yield {
-            type: "meta",
-            content: "financialChain=pdf_content_extract->pdf_content_extract.analyze",
-          };
-
-          const analysisRaw = await fs.readFile(outputPaths.analysisJsonPath, "utf-8");
-          const analysisParsed = JSON.parse(analysisRaw) as {
-            summary?: { overall_view?: string; top_signal?: string; missing_field_count?: number };
-          };
-          const analysisSummary = [
-            `overall=${analysisParsed.summary?.overall_view ?? "暂无分析概述"}`,
-            `topSignal=${analysisParsed.summary?.top_signal ?? "暂无"}`,
-            `missingFieldCount=${analysisParsed.summary?.missing_field_count ?? 0}`,
-          ].join("\n");
-
-          financialAnalysisBlock = [
-            "[FINANCIAL_ANALYSIS_EXECUTION]",
-            `skill=pdf_content_extract`,
-            `script=scripts/analyze_balance_sheet_from_extract.py`,
-            `exitCode=${analysisExecution.exitCode}`,
-            `stdout=${analysisExecution.stdout.slice(0, 1500)}`,
-            `stderr=${analysisExecution.stderr.slice(0, 800)}`,
-            "[FINANCIAL_ANALYSIS_SUMMARY]",
-            analysisSummary,
-            "[/FINANCIAL_ANALYSIS_SUMMARY]",
-            "[/FINANCIAL_ANALYSIS_EXECUTION]",
-          ].join("\n");
-        }
+      for (const meta of stepMetaEvents) {
+        yield { type: "meta", content: meta };
       }
 
       let parsedPreview = "";
       if (autoSkillDecision) {
+        const firstResolved = planExecution.stepResults[0]?.resolvedArgs ?? autoSkillDecision.args;
         try {
           parsedPreview = await buildParsedResultPreview({
             ...autoSkillDecision,
-            args: scriptArgs,
+            args: firstResolved,
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -198,19 +135,31 @@ export class ChatService {
         }
       }
 
+      const stepBlocks = planExecution.stepResults.map((result, index) =>
+        [
+          `[STEP:${index + 1}]`,
+          `id=${result.step.id}`,
+          `skill=${result.step.skillName}`,
+          `script=${result.step.scriptPath || "none"}`,
+          `status=${result.status}`,
+          `exitCode=${result.exitCode}`,
+          `reason=${result.step.reason}`,
+          `resolvedArgs=${JSON.stringify(result.resolvedArgs)}`,
+          `stdout=${result.stdout.slice(0, 3000)}`,
+          `stderr=${result.stderr.slice(0, 1500)}`,
+          `[/STEP:${index + 1}]`,
+        ].join("\n"),
+      );
+
       skillResultBlock = [
-        "[SKILL_EXECUTION]",
-        `skill=${selectedSkill.skillName}`,
-        `script=${selectedSkill.scriptPath}`,
-        `exitCode=${execution.exitCode}`,
-        `reason=${selectedSkill.reason}`,
-        `stdout=${execution.stdout.slice(0, 4000)}`,
-        `stderr=${execution.stderr.slice(0, 2000)}`,
+        "[SKILL_PLAN]",
+        `triggerSource=${finalSkillPlan.triggerSource}`,
+        `planReason=${finalSkillPlan.planReason}`,
+        ...stepBlocks,
         parsedPreview ? "[PARSED_DOCUMENT]" : "",
         parsedPreview,
         parsedPreview ? "[/PARSED_DOCUMENT]" : "",
-        financialAnalysisBlock,
-        "[/SKILL_EXECUTION]",
+        "[/SKILL_PLAN]",
       ]
         .filter(Boolean)
         .join("\n");
@@ -241,6 +190,37 @@ export class ChatService {
     this.sessionStore.setHistory(sessionId, nextHistory);
 
     yield { type: "done", content: "completed" };
+  }
+
+  /**
+   * 合并自动路由与 LLM 计划，自动路由优先，LLM 计划补充去重步骤。
+   */
+  private mergeSkillPlans(autoPlan: SkillPlan | null, llmPlan: SkillPlan | null): SkillPlan | null {
+    if (!autoPlan && !llmPlan) {
+      return null;
+    }
+    if (autoPlan && !llmPlan) {
+      return autoPlan;
+    }
+    if (!autoPlan && llmPlan) {
+      return llmPlan;
+    }
+    const merged = [...(autoPlan?.steps ?? [])];
+    const existed = new Set(
+      merged.map((step) => `${step.skillName}::${step.scriptPath}::${JSON.stringify(step.args)}`),
+    );
+    for (const step of llmPlan?.steps ?? []) {
+      const signature = `${step.skillName}::${step.scriptPath}::${JSON.stringify(step.args)}`;
+      if (!existed.has(signature)) {
+        merged.push(step);
+        existed.add(signature);
+      }
+    }
+    return {
+      steps: merged,
+      triggerSource: "hybrid",
+      planReason: `auto+llm merged (${merged.length} steps)`,
+    };
   }
 
   /**

@@ -55,9 +55,9 @@ describe("chat integration", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.body).toContain("skillName=pdf_content_extract");
+    expect(response.body).toContain("skillPlanSteps=1");
     expect(response.body).toContain("skillTriggerSource=auto");
-    expect(response.body).toContain("skillExecutionConfirmed=true");
+    expect(response.body).toContain("skillStepCompleted=step_1_auto_primary");
   });
 
   test("auto route wins when message conflicts with fake LLM skill decision", async () => {
@@ -71,9 +71,9 @@ describe("chat integration", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.body).toContain("已按文件类型自动路由 skill: docx");
-    expect(response.body).toContain("skill=docx");
-    expect(response.body).toContain("skillTriggerSource=auto");
+    expect(response.body).toContain("skillPlanSteps=2");
+    expect(response.body).toContain("skillStepCompleted=step_1_auto_primary");
+    expect(response.body).toContain("skillTriggerSource=hybrid");
   });
 
   test("returns structured error when runtime execution fails", async () => {
@@ -90,9 +90,8 @@ describe("chat integration", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.body).toContain("\"type\":\"error\"");
-      expect(response.body).toContain("failureStage=spawn");
-      expect(response.body).toContain("python_not_exists_for_test");
+      expect(response.body).toContain("skillStepFailed=step_1_auto_primary");
+      expect(response.body).toContain("ENOENT");
     } finally {
       if (typeof originalPythonBin === "string") {
         process.env.PYTHON_BIN = originalPythonBin;
@@ -113,9 +112,11 @@ describe("chat integration", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.body).toContain("financialChain=pdf_content_extract->pdf_content_extract.analyze");
+    expect(response.body).toContain("skillPlanSteps=3");
+    expect(response.body).toContain("step_2_pdf_balance_sheet_analyze");
+    expect(response.body).toContain("step_3_balance_sheet_methodology");
     expect(response.body).toContain("skillTriggerSource=auto");
-    expect(response.body).toContain("FINANCIAL_ANALYSIS_");
+    expect(response.body).toContain("[SKILL_PLAN]");
     expect(response.body).not.toContain("请确认我已成功提取内容后");
   });
 });

@@ -1,6 +1,11 @@
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import { buildDocumentCatalog, decideAutoSkillByDocument, type DocumentCatalog } from "../src/chat/document-router";
+import {
+  buildAutoSkillPlanByDocument,
+  buildDocumentCatalog,
+  decideAutoSkillByDocument,
+  type DocumentCatalog,
+} from "../src/chat/document-router.js";
 
 const projectRoot = "d:/vscode project/FIN_AGENT/skill_agent/backend";
 
@@ -78,5 +83,19 @@ describe("document router", () => {
       projectRoot,
     });
     expect(decision).toBeNull();
+  });
+
+  test("builds multi-step auto plan for financial pdf analysis", async () => {
+    const catalog = await buildDocumentCatalog(projectRoot);
+    const planDecision = buildAutoSkillPlanByDocument({
+      userMessage: "分析贵州茅台半年报的资产负债表",
+      catalog,
+      projectRoot,
+    });
+
+    expect(planDecision).not.toBeNull();
+    expect(planDecision?.plan.steps.length).toBeGreaterThanOrEqual(2);
+    expect(planDecision?.plan.steps[0]?.skillName).toBe("pdf_content_extract");
+    expect(planDecision?.plan.steps[1]?.scriptPath).toBe("scripts/analyze_balance_sheet_from_extract.py");
   });
 });

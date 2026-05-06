@@ -3,15 +3,15 @@
     "overall_view": "分析基于资产负债表维度，聚焦偿债能力、资产质量与潜在会计风险。",
     "signal_count": 1,
     "top_signal": "未触发高风险规则，建议结合多期报表继续跟踪。",
-    "missing_field_count": 8
+    "missing_field_count": 1
   },
   "metrics": {
-    "cash_to_short_debt": null,
-    "receivables_ratio": null,
-    "inventory_ratio": null,
-    "liability_ratio": null,
+    "cash_to_short_debt": 1665963894.094516,
+    "receivables_ratio": 1.710818389297401e-11,
+    "inventory_ratio": 0.17884186846660505,
+    "liability_ratio": 0.1465926830666913,
     "goodwill_ratio": null,
-    "construction_ratio": null
+    "construction_ratio": 6.8432735571896045e-12
   },
   "signals": [
     {
@@ -21,23 +21,59 @@
     }
   ],
   "normalized_balance_sheet": {
-    "cash_and_equivalents": null,
-    "accounts_receivable": null,
-    "inventory": null,
-    "short_term_debt": null,
-    "total_assets": null,
-    "total_liabilities": null,
+    "cash_and_equivalents": 51644880716.93,
+    "accounts_receivable": 5.0,
+    "inventory": 52267929075.76,
+    "short_term_debt": 31.0,
+    "total_assets": 292257789095.51,
+    "total_liabilities": 42842853450.65,
     "goodwill": null,
-    "construction_in_progress": null
+    "construction_in_progress": 2.0
   },
   "missing_fields": [
-    "cash_and_equivalents",
-    "accounts_receivable",
-    "inventory",
-    "short_term_debt",
-    "total_assets",
-    "total_liabilities",
-    "goodwill",
-    "construction_in_progress"
-  ]
+    "goodwill"
+  ],
+  "field_sources": {
+    "cash_and_equivalents": {
+      "matched_pattern": "货币资金",
+      "matched_line": "货币资金 51,644,880,716.93 17.67 59,295,822,956.89 19.84 -12.90",
+      "rule": "line_keyword_number"
+    },
+    "accounts_receivable": {
+      "matched_pattern": "应收账款",
+      "matched_line": "应收账款 5 37,961,242.39 18,974,192.75",
+      "rule": "line_keyword_number"
+    },
+    "inventory": {
+      "matched_pattern": "存货",
+      "matched_line": "存货 52,267,929,075.76 51,675,411,372.85",
+      "rule": "line_keyword_number"
+    },
+    "short_term_debt": {
+      "matched_pattern": "fallback_full_text",
+      "matched_line": "full_text_fallback",
+      "rule": "fallback_first_number"
+    },
+    "total_assets": {
+      "matched_pattern": "fallback_full_text",
+      "matched_line": "full_text_fallback",
+      "rule": "fallback_first_number"
+    },
+    "total_liabilities": {
+      "matched_pattern": "fallback_full_text",
+      "matched_line": "full_text_fallback",
+      "rule": "fallback_first_number"
+    },
+    "goodwill": null,
+    "construction_in_progress": {
+      "matched_pattern": "在建工程",
+      "matched_line": "（2）公司固定资产新建工程、改扩建工程等按所发生的实际支出列入在建工程。用借款进行的工",
+      "rule": "line_keyword_number"
+    }
+  },
+  "extraction_confidence": {
+    "field_coverage": 0.875,
+    "extracted_field_count": 7,
+    "total_field_count": 8
+  }
 }

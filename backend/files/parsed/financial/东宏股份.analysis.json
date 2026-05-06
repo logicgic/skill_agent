@@ -1,0 +1,84 @@
+{
+  "summary": {
+    "overall_view": "分析基于资产负债表维度，聚焦偿债能力、资产质量与潜在会计风险。",
+    "signal_count": 2,
+    "top_signal": "货币资金低于短期债务，存在短期偿债压力。",
+    "missing_field_count": 1
+  },
+  "metrics": {
+    "cash_to_short_debt": 0.6228668941979522,
+    "receivables_ratio": 0.1768523526230395,
+    "inventory_ratio": 0.08220659816116821,
+    "liability_ratio": 0.3642509464575447,
+    "goodwill_ratio": null,
+    "construction_ratio": 0.21444023796646838
+  },
+  "signals": [
+    {
+      "rule_id": "liquidity_risk_001",
+      "level": "high",
+      "message": "货币资金低于短期债务，存在短期偿债压力。"
+    },
+    {
+      "rule_id": "construction_risk_001",
+      "level": "medium",
+      "message": "在建工程占比较高，需关注资本化与减值风险。"
+    }
+  ],
+  "normalized_balance_sheet": {
+    "cash_and_equivalents": 3.65,
+    "accounts_receivable": 6.54,
+    "inventory": 3.04,
+    "short_term_debt": 5.86,
+    "total_assets": 36.98,
+    "total_liabilities": 13.47,
+    "goodwill": null,
+    "construction_in_progress": 7.93
+  },
+  "missing_fields": [
+    "goodwill"
+  ],
+  "field_sources": {
+    "cash_and_equivalents": {
+      "matched_pattern": "货币资金",
+      "matched_line": "货币资金 3.65 9.75 10.50 13.92 成长能力",
+      "rule": "line_keyword_number"
+    },
+    "accounts_receivable": {
+      "matched_pattern": "应收账款",
+      "matched_line": "资本公积 6.54 6.28 6.28 6.28 应收账款周转率 1.74 1.71 1.93 1.93",
+      "rule": "line_keyword_number"
+    },
+    "inventory": {
+      "matched_pattern": "存货",
+      "matched_line": "存货 3.04 2.74 3.13 3.59 营业利润增长率 4.77% -6.85% 31.69% 27.53%",
+      "rule": "line_keyword_number"
+    },
+    "short_term_debt": {
+      "matched_pattern": "短期借款",
+      "matched_line": "短期借款 5.86 6.00 7.00 8.00 ROA 4.58% 4.01% 4.80% 5.33%",
+      "rule": "line_keyword_number"
+    },
+    "total_assets": {
+      "matched_pattern": "资产总计",
+      "matched_line": "资产总计 36.98 39.14 42.72 48.91 ROE 7.20% 6.37% 7.81% 9.24%",
+      "rule": "line_keyword_number"
+    },
+    "total_liabilities": {
+      "matched_pattern": "负债合计",
+      "matched_line": "负债合计 13.47 14.48 16.49 20.71 总资产周转率 0.69 0.61 0.65 0.67",
+      "rule": "line_keyword_number"
+    },
+    "goodwill": null,
+    "construction_in_progress": {
+      "matched_pattern": "在建工程",
+      "matched_line": "固定资产和在建工程 7.93 7.57 7.18 6.77 毛利率 18.66% 19.32% 20.10% 20.91%",
+      "rule": "line_keyword_number"
+    }
+  },
+  "extraction_confidence": {
+    "field_coverage": 0.875,
+    "extracted_field_count": 7,
+    "total_field_count": 8
+  }
+}

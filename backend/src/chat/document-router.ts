@@ -1,5 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { buildFinancialOutputPaths, detectFinancialIntent } from "./financial-intent.js";
+import type { SkillPlan } from "./skill-plan.js";
 
 /**
  * 支持自动路由的文档类型。
@@ -45,6 +47,16 @@ export interface AutoSkillDecision {
   /** 决策说明。 */
   reason: string;
   /** 被匹配到的文档。 */
+  matchedDocument: DocumentEntry;
+}
+
+/**
+ * 自动路由生成的多步计划结果。
+ */
+export interface AutoSkillPlanDecision {
+  /** 自动路由生成的计划。 */
+  plan: SkillPlan;
+  /** 第一步匹配到的文档。 */
   matchedDocument: DocumentEntry;
 }
 
@@ -200,6 +212,63 @@ export const decideAutoSkillByDocument = (input: {
     args: [matchedDocument.absolutePath],
     reason: `识别到 XLSX 文档：${matchedDocument.relativePath}，自动调用 xlsx skill`,
     matchedDocument,
+  };
+};
+
+/**
+ * 自动路由生成多步 skill 计划。
+ */
+export const buildAutoSkillPlanByDocument = (input: {
+  userMessage: string;
+  catalog: DocumentCatalog;
+  projectRoot: string;
+}): AutoSkillPlanDecision | null => {
+  const single = decideAutoSkillByDocument(input);
+  if (!single) {
+    return null;
+  }
+
+  const steps: SkillPlan["steps"] = [
+    {
+      id: "step_1_auto_primary",
+      skillName: single.skillName,
+      scriptPath: single.scriptPath,
+      args: single.args,
+      reason: single.reason,
+      required: true,
+    },
+  ];
+
+  if (single.skillName === "pdf_content_extract") {
+    const financialIntent = detectFinancialIntent(input.userMessage);
+    if (financialIntent) {
+      const outputPaths = buildFinancialOutputPaths(input.projectRoot, single.matchedDocument);
+      steps.push({
+        id: "step_2_pdf_balance_sheet_analyze",
+        skillName: "pdf_content_extract",
+        scriptPath: "scripts/analyze_balance_sheet_from_extract.py",
+        args: [outputPaths.extractJsonPath, outputPaths.analysisJsonPath],
+        reason: `识别到财报分析意图(${financialIntent})，自动追加资产负债分析步骤`,
+        required: false,
+      });
+      steps.push({
+        id: "step_3_balance_sheet_methodology",
+        skillName: "balance_sheet_analysis",
+        scriptPath: "",
+        args: [],
+        reason: "追加方法论分析步骤（无脚本执行）",
+        required: false,
+      });
+    }
+  }
+
+  return {
+    plan: {
+      steps,
+      triggerSource: "auto",
+      planReason: `自动路由匹配文档 ${single.matchedDocument.relativePath}，生成 ${steps.length} 步计划`,
+    },
+    matchedDocument: single.matchedDocument,
   };
 };
 

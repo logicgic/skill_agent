@@ -8,10 +8,10 @@ export class FakeAgentLlm {
         if (normalizedMessage.includes("pdf")) {
             return {
                 shouldUseSkill: true,
-                skillName: "pdf",
-                scriptPath: "scripts/extract_form_structure.py",
+                skillName: "pdf_content_extract",
+                scriptPath: "scripts/extract_pdf_content.py",
                 args: ["{FILE_PDF}", "{OUTPUT_JSON}"],
-                reason: "消息中明确提到 pdf，优先调用 pdf skill",
+                reason: "消息中明确提到 pdf，优先调用 pdf_content_extract skill",
             };
         }
         if (normalizedMessage.includes("docx") || normalizedMessage.includes("word")) {
@@ -26,6 +26,26 @@ export class FakeAgentLlm {
         return {
             shouldUseSkill: false,
             reason: `根据当前规则无需调用 skill（可用 skills: ${input.skills.map((skill) => skill.name).join(", ")}）`,
+        };
+    }
+    async judgeSkillPlan(input) {
+        const single = await this.judgeSkill(input);
+        if (!single.shouldUseSkill || !single.skillName || !single.scriptPath) {
+            return null;
+        }
+        return {
+            triggerSource: "llm",
+            planReason: single.reason,
+            steps: [
+                {
+                    id: "step_1_llm_primary",
+                    skillName: single.skillName,
+                    scriptPath: single.scriptPath,
+                    args: single.args ?? [],
+                    reason: single.reason,
+                    required: true,
+                },
+            ],
         };
     }
     async streamAnswer(input) {
@@ -82,6 +102,48 @@ export class LlamaIndexAgentLlm {
                 shouldUseSkill: false,
                 reason: "模型 skill 决策解析失败，降级为不调用 skill",
             };
+        }
+    }
+    async judgeSkillPlan(input) {
+        const planPrompt = [
+            "你是 skill 路由器，请仅输出 JSON。",
+            "可选 skills（name + description）：",
+            ...input.skills.map((skill) => `- ${skill.name}: ${skill.description}`),
+            "输出格式: {\"triggerSource\":\"llm\",\"planReason\":\"...\",\"steps\":[{\"id\":\"...\",\"skillName\":\"...\",\"scriptPath\":\"...\",\"args\":[],\"reason\":\"...\",\"required\":true}]}",
+            "如果不需要调用 skill，输出 null。",
+            "每个 step 必须包含 skillName/scriptPath/args/reason/required。",
+            `用户请求: ${input.userMessage}`,
+        ].join("\n");
+        const response = await this.llm.chat({
+            stream: false,
+            messages: [{ role: "user", content: planPrompt }],
+        });
+        const raw = typeof response.message.content === "string" ? response.message.content.trim() : "null";
+        if (raw === "null") {
+            return null;
+        }
+        try {
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed.steps) || parsed.steps.length === 0) {
+                return null;
+            }
+            return {
+                triggerSource: "llm",
+                planReason: parsed.planReason ?? "模型生成多步计划",
+                steps: parsed.steps
+                    .filter((step) => Boolean(step?.skillName && step?.scriptPath))
+                    .map((step, index) => ({
+                    id: step.id || `step_${index + 1}_llm`,
+                    skillName: step.skillName,
+                    scriptPath: step.scriptPath,
+                    args: Array.isArray(step.args) ? step.args : [],
+                    reason: step.reason ?? "模型生成步骤",
+                    required: Boolean(step.required),
+                })),
+            };
+        }
+        catch {
+            return null;
         }
     }
     async streamAnswer(input) {

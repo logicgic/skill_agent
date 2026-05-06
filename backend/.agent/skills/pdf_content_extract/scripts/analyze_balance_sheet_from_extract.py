@@ -11,6 +11,14 @@ import sys
 from pathlib import Path
 
 
+BALANCE_SHEET_SECTION_HINTS = [
+    "资产负债表",
+    "资产及负债状况分析",
+    "资产构成重大变动情况",
+    "负债状况",
+]
+
+
 def _normalize_number(raw_value: str) -> float | None:
     """
     将文本中的数字规范为 float，支持千分位与括号负数。
@@ -48,21 +56,92 @@ def _extract_first_number_by_patterns(text: str, patterns: list[str]) -> float |
     return None
 
 
+def _extract_numbers_from_line(line: str) -> list[float]:
+    """
+    从单行提取数字，忽略百分比值。
+    """
+    values: list[float] = []
+    for matched in re.finditer(r"[-(]?\d[\d,，]*(?:\.\d+)?\)?", line):
+        end_idx = matched.end()
+        if end_idx < len(line) and line[end_idx] == "%":
+            continue
+        normalized = _normalize_number(matched.group(0))
+        if normalized is not None:
+            values.append(normalized)
+    return values
+
+
+def _choose_number_from_line(line: str) -> float | None:
+    """
+    从命中行中选择最可能代表期末值的数字。
+    """
+    numbers = _extract_numbers_from_line(line)
+    if not numbers:
+        return None
+    if re.search(r"本报告期末|期末|本期末", line):
+        return numbers[0]
+    return numbers[0]
+
+
 def _collect_text(payload: dict) -> str:
     """
-    组装分析所需全文，优先使用 full_text_preview，其次拼接页预览。
+    组装分析所需全文，优先使用 full_text，其次拼接每页完整文本。
     """
+    full_text = payload.get("full_text")
+    if isinstance(full_text, str) and full_text.strip():
+        return full_text
+
+    page_texts: list[str] = []
+    for page in payload.get("pages", []):
+        if isinstance(page, dict):
+            text_full = page.get("text_full")
+            if isinstance(text_full, str) and text_full.strip():
+                page_texts.append(text_full)
+    if page_texts:
+        return "\n".join(page_texts)
+
     full_text_preview = payload.get("full_text_preview")
     if isinstance(full_text_preview, str) and full_text_preview.strip():
         return full_text_preview
 
-    page_texts: list[str] = []
     for page in payload.get("pages", []):
         if isinstance(page, dict):
             text_preview = page.get("text_preview")
             if isinstance(text_preview, str) and text_preview.strip():
                 page_texts.append(text_preview)
     return "\n".join(page_texts)
+
+
+def _build_candidate_lines(source_text: str) -> list[str]:
+    """
+    优先聚焦资产负债相关段落，提升数字抽取稳定性。
+    """
+    lines = source_text.splitlines()
+    candidates: list[str] = []
+    for idx, line in enumerate(lines):
+        if any(hint in line for hint in BALANCE_SHEET_SECTION_HINTS):
+            start = max(0, idx - 3)
+            end = min(len(lines), idx + 20)
+            candidates.extend(lines[start:end])
+    # 没有命中段落提示时，退回全量行。
+    return candidates if candidates else lines
+
+
+def _extract_number_with_source(lines: list[str], patterns: list[str]) -> tuple[float | None, dict | None]:
+    """
+    返回命中的数值及来源信息。
+    """
+    for line in lines:
+        for pattern in patterns:
+            if re.search(pattern, line):
+                selected = _choose_number_from_line(line)
+                if selected is not None:
+                    return selected, {
+                        "matched_pattern": pattern,
+                        "matched_line": line[:200],
+                        "rule": "line_keyword_number",
+                    }
+    return None, None
 
 
 def analyze_balance_sheet(payload: dict) -> dict:
@@ -83,9 +162,20 @@ def analyze_balance_sheet(payload: dict) -> dict:
 
     normalized_balance_sheet: dict[str, float | None] = {}
     missing_fields: list[str] = []
+    field_sources: dict[str, dict | None] = {}
+    candidate_lines = _build_candidate_lines(source_text)
     for field_name, patterns in field_patterns.items():
-        extracted_value = _extract_first_number_by_patterns(source_text, patterns)
+        extracted_value, source_info = _extract_number_with_source(candidate_lines, patterns)
+        if extracted_value is None:
+            extracted_value = _extract_first_number_by_patterns(source_text, patterns)
+            if extracted_value is not None:
+                source_info = {
+                    "matched_pattern": "fallback_full_text",
+                    "matched_line": "full_text_fallback",
+                    "rule": "fallback_first_number",
+                }
         normalized_balance_sheet[field_name] = extracted_value
+        field_sources[field_name] = source_info
         if extracted_value is None:
             missing_fields.append(field_name)
 
@@ -147,6 +237,12 @@ def analyze_balance_sheet(payload: dict) -> dict:
         "top_signal": signals[0]["message"],
         "missing_field_count": len(missing_fields),
     }
+    extracted_count = len(field_patterns) - len(missing_fields)
+    extraction_confidence = {
+        "field_coverage": extracted_count / len(field_patterns),
+        "extracted_field_count": extracted_count,
+        "total_field_count": len(field_patterns),
+    }
 
     return {
         "summary": summary,
@@ -154,6 +250,8 @@ def analyze_balance_sheet(payload: dict) -> dict:
         "signals": signals,
         "normalized_balance_sheet": normalized_balance_sheet,
         "missing_fields": missing_fields,
+        "field_sources": field_sources,
+        "extraction_confidence": extraction_confidence,
     }
 
 

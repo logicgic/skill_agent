@@ -20,6 +20,7 @@ def extract_pdf_content(input_pdf: str) -> dict:
     pages: list[dict] = []
     warnings: list[str] = []
     full_text_parts: list[str] = []
+    empty_pages = 0
 
     with pdfplumber.open(str(input_path)) as pdf:
         total_pages = len(pdf.pages)
@@ -30,6 +31,7 @@ def extract_pdf_content(input_pdf: str) -> dict:
             page_text = (page.extract_text() or "").strip()
             if not page_text:
                 warnings.append(f"第 {page_index} 页未提取到文本")
+                empty_pages += 1
                 continue
 
             full_text_parts.append(page_text)
@@ -37,6 +39,7 @@ def extract_pdf_content(input_pdf: str) -> dict:
                 {
                     "page_number": page_index,
                     "char_count": len(page_text),
+                    "text_full": page_text,
                     "text_preview": page_text[:800],
                 }
             )
@@ -47,8 +50,11 @@ def extract_pdf_content(input_pdf: str) -> dict:
             "source_pdf": input_path.name,
             "total_pages": total_pages,
             "pages_processed": len(pages),
+            "characters_total": len(full_text),
+            "empty_pages": empty_pages,
         },
         "pages": pages,
+        "full_text": full_text,
         "full_text_preview": full_text[:4000],
         "warnings": warnings,
     }

@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { buildFinancialOutputPaths, detectFinancialIntent } from "./financial-intent.js";
 /**
  * 递归扫描目录下全部文件路径。
  */
@@ -101,10 +102,10 @@ export const decideAutoSkillByDocument = (input) => {
     const normalized = normalizeBaseName(matchedDocument.baseName);
     if (matchedDocument.type === "pdf") {
         return {
-            skillName: "pdf",
-            scriptPath: "scripts/extract_form_structure.py",
+            skillName: "pdf_content_extract",
+            scriptPath: "scripts/extract_pdf_content.py",
             args: [matchedDocument.absolutePath, path.join(input.projectRoot, "files", "parsed", "pdf", `${normalized}.json`)],
-            reason: `识别到 PDF 文档：${matchedDocument.relativePath}，自动调用 pdf skill`,
+            reason: `识别到 PDF 文档：${matchedDocument.relativePath}，自动调用 pdf_content_extract skill`,
             matchedDocument,
         };
     }
@@ -133,20 +134,66 @@ export const decideAutoSkillByDocument = (input) => {
     };
 };
 /**
+ * 自动路由生成多步 skill 计划。
+ */
+export const buildAutoSkillPlanByDocument = (input) => {
+    const single = decideAutoSkillByDocument(input);
+    if (!single) {
+        return null;
+    }
+    const steps = [
+        {
+            id: "step_1_auto_primary",
+            skillName: single.skillName,
+            scriptPath: single.scriptPath,
+            args: single.args,
+            reason: single.reason,
+            required: true,
+        },
+    ];
+    if (single.skillName === "pdf_content_extract") {
+        const financialIntent = detectFinancialIntent(input.userMessage);
+        if (financialIntent) {
+            const outputPaths = buildFinancialOutputPaths(input.projectRoot, single.matchedDocument);
+            steps.push({
+                id: "step_2_pdf_balance_sheet_analyze",
+                skillName: "pdf_content_extract",
+                scriptPath: "scripts/analyze_balance_sheet_from_extract.py",
+                args: [outputPaths.extractJsonPath, outputPaths.analysisJsonPath],
+                reason: `识别到财报分析意图(${financialIntent})，自动追加资产负债分析步骤`,
+                required: false,
+            });
+            steps.push({
+                id: "step_3_balance_sheet_methodology",
+                skillName: "balance_sheet_analysis",
+                scriptPath: "",
+                args: [],
+                reason: "追加方法论分析步骤（无脚本执行）",
+                required: false,
+            });
+        }
+    }
+    return {
+        plan: {
+            steps,
+            triggerSource: "auto",
+            planReason: `自动路由匹配文档 ${single.matchedDocument.relativePath}，生成 ${steps.length} 步计划`,
+        },
+        matchedDocument: single.matchedDocument,
+    };
+};
+/**
  * 读取并格式化解析结果摘要，回填给模型使用。
  */
 export const buildParsedResultPreview = async (decision) => {
-    if (decision.skillName === "pdf") {
+    if (decision.skillName === "pdf_content_extract") {
         const outputPath = decision.args[1];
         const raw = await fs.readFile(outputPath, "utf-8");
         const parsed = JSON.parse(raw);
         return [
             `file=${decision.matchedDocument.relativePath}`,
             `pages=${parsed.pages?.length ?? 0}`,
-            `labels=${parsed.labels?.length ?? 0}`,
-            `lines=${parsed.lines?.length ?? 0}`,
-            `checkboxes=${parsed.checkboxes?.length ?? 0}`,
-            `rowBoundaries=${parsed.row_boundaries?.length ?? 0}`,
+            `warnings=${parsed.warnings?.length ?? 0}`,
         ].join("\n");
     }
     if (decision.skillName === "docx") {
@@ -166,7 +213,7 @@ export const buildParsedResultPreview = async (decision) => {
  * 确保自动路由技能的输出目录存在。
  */
 export const ensureAutoSkillOutputPath = async (decision) => {
-    if (decision.skillName === "pdf") {
+    if (decision.skillName === "pdf_content_extract") {
         await fs.mkdir(path.dirname(decision.args[1]), { recursive: true });
         return;
     }
