@@ -1,3 +1,7 @@
 .trae/
 .vscode/
 taskmd/
+backend/node_modules/
+backend/dist/
+backend/files/parsed/
+backend/test/tmp/
