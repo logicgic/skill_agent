@@ -1,7 +1,7 @@
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import { resolveBackendRootFromModuleUrl, resolveScriptArgPlaceholders } from "../src/path-manager";
-import type { DocumentCatalog } from "../src/chat/document-router";
+import { resolveBackendRootFromModuleUrl, resolveScriptArgPlaceholders } from "../src/path-manager.js";
+import type { DocumentCatalog } from "../src/chat/document-router.js";
 
 describe("path manager", () => {
   test("resolves backend root from module url", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { loadSkills } from "../src/skill/skill-loader";
+import { loadSkills } from "../src/skill/skill-loader.js";
 
 const projectRoot = "d:/vscode project/FIN_AGENT/skill_agent/backend";
 

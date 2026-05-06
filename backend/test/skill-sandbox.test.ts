@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from "vitest";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { runSkillScript } from "../src/skill/skill-sandbox";
+import { runSkillScript } from "../src/skill/skill-sandbox.js";
 
 const projectRoot = "d:/vscode project/FIN_AGENT/skill_agent/backend";
 const outputDir = path.join(projectRoot, "test", "tmp");

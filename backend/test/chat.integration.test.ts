@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { createServer } from "../src/server";
+import { createServer } from "../src/server.js";
 
 const projectRoot = "d:/vscode project/FIN_AGENT/skill_agent/backend";
 

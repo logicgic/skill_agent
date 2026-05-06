@@ -1,7 +1,7 @@
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import { buildDocumentCatalog } from "../src/chat/document-router";
-import { runSkillPlan } from "../src/chat/skill-orchestrator";
+import { buildDocumentCatalog } from "../src/chat/document-router.js";
+import { runSkillPlan } from "../src/chat/skill-orchestrator.js";
 
 const projectRoot = "d:/vscode project/FIN_AGENT/skill_agent/backend";
 
@@ -52,4 +52,3 @@ describe("skill orchestrator", () => {
     expect(execution.stepResults[2]?.status).toBe("skipped");
   });
 });
-

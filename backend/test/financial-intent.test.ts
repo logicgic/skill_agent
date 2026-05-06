@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { buildDocumentCatalog } from "../src/chat/document-router";
-import { decideFinancialIntentByMessage, detectFinancialIntent } from "../src/chat/financial-intent";
+import { buildDocumentCatalog } from "../src/chat/document-router.js";
+import { decideFinancialIntentByMessage, detectFinancialIntent } from "../src/chat/financial-intent.js";
 
 const projectRoot = "d:/vscode project/FIN_AGENT/skill_agent/backend";
 

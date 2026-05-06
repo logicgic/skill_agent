@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import type { SkillDefinition } from "../src/skill/skill-types";
-import type { DocumentCatalog } from "../src/chat/document-router";
-import { ChatService } from "../src/chat/chat-service";
+import type { SkillDefinition } from "../src/skill/skill-types.js";
+import type { DocumentCatalog } from "../src/chat/document-router.js";
+import { ChatService } from "../src/chat/chat-service.js";
 
 describe("chat service system prompt", () => {
   test("includes balance-sheet-analysis routing hint", () => {
